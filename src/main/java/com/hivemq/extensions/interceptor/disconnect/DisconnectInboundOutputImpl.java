@@ -50,6 +50,13 @@ public class DisconnectInboundOutputImpl extends AbstractSimpleAsyncOutput<Disco
                 originalSessionExpiryInterval);
     }
 
+    public DisconnectInboundOutputImpl(final @NotNull DisconnectInboundOutputImpl disconnectInboundOutput) {
+        super(disconnectInboundOutput.asyncer);
+        this.configurationService = disconnectInboundOutput.configurationService;
+        disconnectPacket = disconnectInboundOutput.getDisconnectPacket();
+        this.originalSessionExpiryInterval = disconnectInboundOutput.originalSessionExpiryInterval;
+    }
+
     @Override
     public @NotNull ModifiableInboundDisconnectPacketImpl getDisconnectPacket() {
         return disconnectPacket;

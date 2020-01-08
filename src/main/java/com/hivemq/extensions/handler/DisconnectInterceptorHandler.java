@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.hivemq.extensions.handler;
 
 import com.google.inject.Inject;
@@ -41,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * @author Robin Atherton
@@ -119,12 +121,14 @@ public class DisconnectInterceptorHandler extends ChannelDuplexHandler {
         final Long originalSessionExpiryInterval = channel.attr(ChannelAttributes.CLIENT_SESSION_EXPIRY_INTERVAL).get();
         final DisconnectInboundOutputImpl output = new DisconnectInboundOutputImpl(
                 configurationService, asyncer, disconnect, originalSessionExpiryInterval);
+        final DisconnectInboundOutputHolder outputHolder = new DisconnectInboundOutputHolder(output);
 
         final DisconnectInboundInputImpl input = new DisconnectInboundInputImpl(clientId, channel, disconnect);
+        final DisconnectInboundInputHolder inputHolder = new DisconnectInboundInputHolder(input);
 
         final DisconnectInboundInterceptorContext interceptorContext =
-                new DisconnectInboundInterceptorContext(DisconnectInboundInterceptorTask.class, clientId, input, ctx,
-                        interceptors.size());
+                new DisconnectInboundInterceptorContext(DisconnectInboundInterceptorTask.class, clientId, ctx,
+                        interceptors.size(), inputHolder, outputHolder);
 
         for (final DisconnectInboundInterceptor interceptor : interceptors) {
 
@@ -167,13 +171,15 @@ public class DisconnectInterceptorHandler extends ChannelDuplexHandler {
         }
 
         final DisconnectOutboundInputImpl input = new DisconnectOutboundInputImpl(clientId, channel, disconnect);
+        final DisconnectOutboundInputHolder inputHolder = new DisconnectOutboundInputHolder(input);
 
         final DisconnectOutboundOutputImpl output =
                 new DisconnectOutboundOutputImpl(configurationService, asyncer, disconnect);
+        final DisconnectOutboundOutputHolder outputHolder = new DisconnectOutboundOutputHolder(output);
 
         final DisconnectOutboundInterceptorContext interceptorContext =
-                new DisconnectOutboundInterceptorContext(DisconnectOutboundInterceptorTask.class, clientId, input, ctx,
-                        promise, interceptors.size());
+                new DisconnectOutboundInterceptorContext(DisconnectOutboundInterceptorTask.class, clientId, ctx,
+                        promise, interceptors.size(), inputHolder, outputHolder);
 
         for (final DisconnectOutboundInterceptor interceptor : interceptors) {
 
@@ -181,57 +187,107 @@ public class DisconnectInterceptorHandler extends ChannelDuplexHandler {
                     (IsolatedPluginClassloader) interceptor.getClass().getClassLoader());
 
             if (extension == null) {
-                interceptorContext.increment(output);
+                interceptorContext.increment();
                 continue;
             }
 
             final DisconnectOutboundInterceptorTask interceptorTask =
                     new DisconnectOutboundInterceptorTask(interceptor, extension.getId());
 
-            executorService.handlePluginInOutTaskExecution(interceptorContext, input, output, interceptorTask);
+            executorService.handlePluginInOutTaskExecution(
+                    interceptorContext, inputHolder, outputHolder, interceptorTask);
         }
     }
 
     static class DisconnectOutboundInterceptorContext extends PluginInOutTaskContext<DisconnectOutboundOutputImpl> {
 
-        private final @NotNull DisconnectOutboundInputImpl input;
         private final @NotNull ChannelHandlerContext ctx;
         private final @NotNull ChannelPromise promise;
         private final int interceptorCount;
         private final @NotNull AtomicInteger counter;
 
+        private final @NotNull DisconnectOutboundInputHolder inputHolder;
+        private final @NotNull DisconnectOutboundOutputHolder outputHolder;
+
         DisconnectOutboundInterceptorContext(
                 final @NotNull Class<?> taskClazz,
                 final @NotNull String identifier,
-                final @NotNull DisconnectOutboundInputImpl input,
                 final @NotNull ChannelHandlerContext ctx,
                 final @NotNull ChannelPromise promise,
-                final int interceptorCount) {
+                final int interceptorCount,
+                final @NotNull DisconnectOutboundInputHolder inputHolder,
+                final @NotNull DisconnectOutboundOutputHolder outputHolder) {
 
             super(taskClazz, identifier);
-            this.input = input;
             this.ctx = ctx;
             this.promise = promise;
             this.interceptorCount = interceptorCount;
+            this.inputHolder = inputHolder;
+            this.outputHolder = outputHolder;
             this.counter = new AtomicInteger(0);
         }
 
         @Override
         public void pluginPost(final @NotNull DisconnectOutboundOutputImpl output) {
+            final DisconnectOutboundInputImpl input = inputHolder.get();
+            inputHolder.setInput(new DisconnectOutboundInputImpl(input));
+            outputHolder.setOutput(new DisconnectOutboundOutputImpl(output));
+
             if (output.isTimedOut()) {
                 log.debug("Async timeout on inbound DISCONNECT interception.");
-                output.update(input.getDisconnectPacket());
+                outputHolder.get().update(input.getDisconnectPacket());
             } else if (output.getDisconnectPacket().isModified()) {
-                input.update(output.getDisconnectPacket());
+                inputHolder.get().update(output.getDisconnectPacket());
             }
-            increment(output);
+            increment();
         }
 
-        public void increment(final @NotNull DisconnectOutboundOutputImpl output) {
+        public void increment() {
             if (counter.incrementAndGet() == interceptorCount) {
-                final DISCONNECT finalDisconnect = DISCONNECT.createDisconnectFrom(output.getDisconnectPacket());
+                final DISCONNECT finalDisconnect =
+                        DISCONNECT.createDisconnectFrom(outputHolder.get().getDisconnectPacket());
                 ctx.writeAndFlush(finalDisconnect, promise);
             }
+        }
+    }
+
+    public static class DisconnectOutboundOutputHolder implements Supplier<DisconnectOutboundOutputImpl> {
+
+        @NotNull DisconnectOutboundOutputImpl output;
+
+        DisconnectOutboundOutputHolder(
+                @NotNull final DisconnectOutboundOutputImpl output) {
+            this.output = output;
+        }
+
+        @NotNull
+        @Override
+        public DisconnectOutboundOutputImpl get() {
+            return this.output;
+        }
+
+        public void setOutput(@NotNull final DisconnectOutboundOutputImpl output) {
+            this.output = output;
+        }
+    }
+
+    public static class DisconnectOutboundInputHolder implements Supplier<DisconnectOutboundInputImpl> {
+
+        @NotNull DisconnectOutboundInputImpl input;
+
+        DisconnectOutboundInputHolder(
+                @NotNull final DisconnectOutboundInputImpl input) {
+            this.input = input;
+        }
+
+        @NotNull
+        @Override
+        public DisconnectOutboundInputImpl get() {
+            return this.input;
+        }
+
+        public void setInput(@NotNull final DisconnectOutboundInputImpl input) {
+            this.input = input;
         }
     }
 
@@ -275,32 +331,39 @@ public class DisconnectInterceptorHandler extends ChannelDuplexHandler {
     private static class DisconnectInboundInterceptorContext
             extends PluginInOutTaskContext<DisconnectInboundOutputImpl> {
 
-        private final @NotNull DisconnectInboundInputImpl input;
         private final @NotNull ChannelHandlerContext ctx;
         private final int interceptorCount;
         private final @NotNull AtomicInteger counter;
 
+        private final @NotNull DisconnectInboundInputHolder inputHolder;
+        private final @NotNull DisconnectInboundOutputHolder outputHolder;
+
         DisconnectInboundInterceptorContext(
                 final @NotNull Class<?> taskClazz,
                 final @NotNull String identifier,
-                final @NotNull DisconnectInboundInputImpl input,
                 final @NotNull ChannelHandlerContext ctx,
-                final int interceptorCount) {
-
+                final int interceptorCount,
+                final @NotNull DisconnectInboundInputHolder inputHolder,
+                final @NotNull DisconnectInboundOutputHolder outputHolder) {
             super(taskClazz, identifier);
-            this.input = input;
             this.ctx = ctx;
             this.interceptorCount = interceptorCount;
             this.counter = new AtomicInteger(0);
+            this.inputHolder = inputHolder;
+            this.outputHolder = outputHolder;
         }
 
         @Override
         public void pluginPost(final @NotNull DisconnectInboundOutputImpl output) {
+            final DisconnectInboundInputImpl input = inputHolder.get();
+            inputHolder.setInput(new DisconnectInboundInputImpl(input));
+            outputHolder.setOutput(new DisconnectInboundOutputImpl(output));
+
             if (output.isTimedOut()) {
                 log.debug("Async timeout on inbound DISCONNECT interception.");
-                output.update(input.getDisconnectPacket());
+                outputHolder.get().update(input.getDisconnectPacket());
             } else if (output.getDisconnectPacket().isModified()) {
-                input.update(output.getDisconnectPacket());
+                inputHolder.get().update(output.getDisconnectPacket());
             }
             increment(output);
         }
@@ -310,6 +373,46 @@ public class DisconnectInterceptorHandler extends ChannelDuplexHandler {
                 final DISCONNECT finalDisconnect = DISCONNECT.createDisconnectFrom(output.getDisconnectPacket());
                 ctx.fireChannelRead(finalDisconnect);
             }
+        }
+    }
+
+    public static class DisconnectInboundOutputHolder implements Supplier<DisconnectInboundOutputImpl> {
+
+        @NotNull DisconnectInboundOutputImpl output;
+
+        DisconnectInboundOutputHolder(
+                @NotNull final DisconnectInboundOutputImpl output) {
+            this.output = output;
+        }
+
+        @NotNull
+        @Override
+        public DisconnectInboundOutputImpl get() {
+            return this.output;
+        }
+
+        public void setOutput(@NotNull final DisconnectInboundOutputImpl output) {
+            this.output = output;
+        }
+    }
+
+    public static class DisconnectInboundInputHolder implements Supplier<DisconnectInboundInputImpl> {
+
+        @NotNull DisconnectInboundInputImpl input;
+
+        DisconnectInboundInputHolder(
+                @NotNull final DisconnectInboundInputImpl input) {
+            this.input = input;
+        }
+
+        @NotNull
+        @Override
+        public DisconnectInboundInputImpl get() {
+            return this.input;
+        }
+
+        public void setInput(@NotNull final DisconnectInboundInputImpl input) {
+            this.input = input;
         }
     }
 

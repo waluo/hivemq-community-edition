@@ -50,6 +50,13 @@ public class DisconnectInboundInputImpl
         disconnectPacket = new DisconnectPacketImpl(disconnect);
     }
 
+    public DisconnectInboundInputImpl(final @NotNull DisconnectInboundInputImpl disconnectInboundInput) {
+        clientInformation = disconnectInboundInput.clientInformation;
+        connectionInformation = disconnectInboundInput.connectionInformation;
+        disconnectPacket = new DisconnectPacketImpl(disconnectInboundInput.disconnectPacket);
+    }
+
+
     @Override
     public @NotNull ClientInformation getClientInformation() {
         return clientInformation;

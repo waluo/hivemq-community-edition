@@ -44,10 +44,15 @@ public class DisconnectOutboundInputImpl
             final @NotNull String clientId,
             final @NotNull Channel channel,
             final @NotNull DISCONNECT disconnect) {
-
         clientInformation = PluginInformationUtil.getAndSetClientInformation(channel, clientId);
         connectionInformation = PluginInformationUtil.getAndSetConnectionInformation(channel);
         disconnectPacket = new DisconnectPacketImpl(disconnect);
+    }
+
+    public DisconnectOutboundInputImpl(final @NotNull DisconnectOutboundInputImpl disconnectOutboundInput) {
+        clientInformation = disconnectOutboundInput.clientInformation;
+        connectionInformation = disconnectOutboundInput.connectionInformation;
+        disconnectPacket = new DisconnectPacketImpl(disconnectOutboundInput.disconnectPacket);
     }
 
     @Override

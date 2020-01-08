@@ -40,11 +40,17 @@ public class DisconnectOutboundOutputImpl extends AbstractSimpleAsyncOutput<Disc
             final @NotNull FullConfigurationService configurationService,
             final @NotNull PluginOutPutAsyncer asyncer,
             final @NotNull DISCONNECT disconnect) {
-
         super(asyncer);
         this.configurationService = configurationService;
         disconnectPacket = new ModifiableOutboundDisconnectPacketImpl(configurationService, disconnect);
     }
+
+    public DisconnectOutboundOutputImpl(final @NotNull DisconnectOutboundOutputImpl disconnectOutboundOutput) {
+        super(disconnectOutboundOutput.asyncer);
+        this.configurationService = disconnectOutboundOutput.configurationService;
+        disconnectPacket = disconnectOutboundOutput.getDisconnectPacket();
+    }
+
 
     @Override
     public @NotNull ModifiableOutboundDisconnectPacketImpl getDisconnectPacket() {
