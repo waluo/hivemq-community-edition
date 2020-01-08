@@ -136,7 +136,7 @@ public class DisconnectInterceptorHandler extends ChannelDuplexHandler {
                     (IsolatedPluginClassloader) interceptor.getClass().getClassLoader());
 
             if (extension == null) {
-                interceptorContext.increment(output);
+                interceptorContext.increment();
                 continue;
             }
 
@@ -365,12 +365,13 @@ public class DisconnectInterceptorHandler extends ChannelDuplexHandler {
             } else if (output.getDisconnectPacket().isModified()) {
                 inputHolder.get().update(output.getDisconnectPacket());
             }
-            increment(output);
+            increment();
         }
 
-        public void increment(final @NotNull DisconnectInboundOutputImpl output) {
+        public void increment() {
             if (counter.incrementAndGet() == interceptorCount) {
-                final DISCONNECT finalDisconnect = DISCONNECT.createDisconnectFrom(output.getDisconnectPacket());
+                final DISCONNECT finalDisconnect =
+                        DISCONNECT.createDisconnectFrom(outputHolder.get().getDisconnectPacket());
                 ctx.fireChannelRead(finalDisconnect);
             }
         }
