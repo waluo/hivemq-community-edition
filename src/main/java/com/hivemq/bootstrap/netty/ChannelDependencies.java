@@ -32,6 +32,7 @@ import com.hivemq.mqtt.handler.auth.AuthHandler;
 import com.hivemq.mqtt.handler.auth.AuthInProgressMessageHandler;
 import com.hivemq.mqtt.handler.connect.ConnectHandler;
 import com.hivemq.mqtt.handler.connect.ConnectPersistenceUpdateHandler;
+import com.hivemq.mqtt.handler.connect.ConnectionLimiterHandler;
 import com.hivemq.mqtt.handler.connect.StopReadingAfterConnectHandler;
 import com.hivemq.mqtt.handler.disconnect.DisconnectHandler;
 import com.hivemq.mqtt.handler.ping.PingRequestHandler;
@@ -61,6 +62,9 @@ public class ChannelDependencies {
 
     @NotNull
     private final Provider<ConnectHandler> connectHandlerProvider;
+
+    @NotNull
+    private final ConnectionLimiterHandler connectionLimiterHandler;
 
     @NotNull
     private final ConnectPersistenceUpdateHandler connectPersistenceUpdateHandler;
@@ -192,6 +196,7 @@ public class ChannelDependencies {
     public ChannelDependencies(
             @NotNull final Provider<MetricsInitializer> statisticsInitializer,
             @NotNull final Provider<ConnectHandler> connectHandlerProvider,
+            @NotNull final ConnectionLimiterHandler connectionLimiterHandler,
             @NotNull final ConnectPersistenceUpdateHandler connectPersistenceUpdateHandler,
             @NotNull final DisconnectHandler disconnectHandler,
             @NotNull final Provider<SubscribeHandler> subscribeHandlerProvider,
@@ -237,6 +242,7 @@ public class ChannelDependencies {
 
         this.statisticsInitializer = statisticsInitializer;
         this.connectHandlerProvider = connectHandlerProvider;
+        this.connectionLimiterHandler = connectionLimiterHandler;
         this.connectPersistenceUpdateHandler = connectPersistenceUpdateHandler;
         this.disconnectHandler = disconnectHandler;
         this.subscribeHandlerProvider = subscribeHandlerProvider;
@@ -289,6 +295,11 @@ public class ChannelDependencies {
     @NotNull
     public ConnectHandler getConnectHandler() {
         return connectHandlerProvider.get();
+    }
+
+    @NotNull
+    public ConnectionLimiterHandler getConnectionLimiterHandler() {
+        return connectionLimiterHandler;
     }
 
     @NotNull
