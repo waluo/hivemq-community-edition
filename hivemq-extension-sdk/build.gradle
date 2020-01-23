@@ -2,6 +2,10 @@ apply plugin: 'com.jfrog.bintray'
 
 version = '4.2.0-SNAPSHOT'
 
+ext {
+    prevVersion = '4.2.0'
+}
+
 dependencies {
     compile group: 'io.dropwizard.metrics', name: 'metrics-core', version: '4.0.2'
     compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
@@ -154,3 +158,5 @@ bintray {
         }
     }
 }
+
+project.apply from: "${project.rootDir}/gradle/japicc.gradle"
